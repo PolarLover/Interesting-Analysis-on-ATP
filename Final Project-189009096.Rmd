@@ -1,0 +1,183 @@
+---
+title: "Final Project: ATP Matches & World Ranking Analysis"
+author: "MSDS 597 Data Wrangling & Husbandry, Zishen Zhang"
+date: "April 12, 2019"
+
+output: 
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Package Lists:
+
+```{r}
+
+library(tidyverse)
+library(data.table)
+library(readr)
+library(stringr)
+library(rvest)
+library(lubridate)
+library(ggplot2)
+
+```
+
+## Some Prefix before Doing Analysis:
+
+```{r}
+
+atp <- read.csv(file = "ATP.csv", header = TRUE, stringsAsFactors = TRUE)
+atp$tourney_name[atp$tourney_name == "Us Open"] <- "US Open"
+atp$tourney_name[atp$tourney_name == "Australian Chps."] <- "Australian Open"
+atp$tourney_date <- as.Date(atp$tourney_date, "%Y%m%d")
+r <- with(atp, which(atp$tourney_name == "tourney_name", arr.ind = TRUE))
+atp <- atp[-r, ]
+atp <- atp[, -c(10, 16:17, 23, 25:27, 32:49)]
+write.csv(atp, file = 'ATP Matches.csv')
+
+```
+
+## Figuring out the Number of Winning Games of Players in Their Career Lifes:
+
+```{r}
+
+tournament_level <- atp %>% 
+  group_by(tourney_level) %>% 
+  summarise(count = n()) %>% 
+  arrange(tourney_level)
+head(tournament_level)
+
+winner_games <- atp %>% 
+  group_by(winner_name) %>% 
+  summarise(match_n = n()) %>% 
+  arrange(desc(match_n)) %>% 
+  select(winner_name, match_n)
+head(winner_games, 10)
+
+```
+
+## Some Analysis Based on Grand Slam Results between 2003-2016：
+## tourney_level == "G" means Grand Slams. 
+
+```{r}
+
+Grand_Slam_Matches <- atp %>%
+  filter(substr(tourney_id, 1, 4) > "1967" & substr(tourney_id, 1, 4) < "2017" & tourney_level == "G")
+
+Grand_Slam_Finals_2003_2016 <- Grand_Slam_Matches %>% 
+  select(tourney_id, tourney_name, tourney_date, round, surface, winner_name, loser_name, score, minutes) %>%
+  filter(substr(tourney_id, 1, 4) >= "2003" & round == "F") %>%
+  arrange(desc(tourney_date, tourney_name))
+Grand_Slam_Finals_2003_2016
+
+ggplot(Grand_Slam_Finals_2003_2016, aes(winner_name, fill = as.factor(tourney_name))) +
+  geom_bar(stat = "count", alpha = 1 ) + 
+  labs(y = "Numbers of Titles", x = "Title Winners", title = "Grand Slams' Winners 2003 - 2016") +
+  theme(legend.position = "right", axis.text.x = element_text(angle = 90, hjust = 0), plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_legend(title = "Tourney"))
+ggplot(Grand_Slam_Finals_2003_2016, aes(winner_name, fill = as.factor(winner_name))) +
+  geom_bar(alpha = 0.8, show.legend = FALSE) + 
+  labs(y = "Titles", x = "Winners", title = "Grand Slams' Winners 2003 - 2016") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0), plot.title = element_text(hjust = 0.5)) +
+  coord_flip() +
+  facet_wrap(~tourney_name)
+
+```
+
+## Some Analysis Based on ATP1000 Masters Series Results between 2003-2016：
+## tourney_level == "M" means Masters Series.
+
+```{r}
+
+h <- with(atp, which(atp$tourney_name == "Hamburg Masters", arr.ind = TRUE))
+atp <- atp[-h, ]
+
+Masters_Matches <- atp %>%
+  filter(substr(tourney_id, 1, 4) > "1967" & substr(tourney_id, 1, 4) < "2017" & tourney_level == "M")
+
+Masters_Finals_2003_2016 <- Masters_Matches %>% 
+  select(tourney_id, tourney_name, tourney_date, round, surface, winner_name, loser_name, score, minutes) %>%
+  filter(substr(tourney_id, 1, 4) >= "2003" & round == "F") %>%
+  arrange(desc(tourney_date, tourney_name))
+Masters_Finals_2003_2016
+
+ggplot(Masters_Finals_2003_2016, aes(winner_name, fill = as.factor(tourney_name))) +
+  geom_bar(stat = "count", alpha = 1 ) + 
+  labs(y = "Numbers of Titles", x = "Title Winners", title = "ATP Masters Series' Winners 2003 - 2016") +
+  theme(legend.position = "right", axis.text.x = element_text(angle = 90, hjust = 0), plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_legend(title = "Tourney"))
+ggplot(Masters_Finals_2003_2016, aes(winner_name, fill = as.factor(winner_name))) +
+  geom_bar(alpha = 0.8, show.legend = FALSE) + 
+  labs(y = "Titles", x = "Winners", title = "ATP Masters Series' Winners 2003 - 2016") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0), plot.title = element_text(hjust = 0.5)) +
+  coord_flip() +
+  facet_wrap(~tourney_name)
+
+```
+
+## Extracting ATP World Ranking from ATP Official Website:
+
+```{r}
+
+ranking_2015 <- "https://www.atptour.com/en/rankings/singles?rankDate=2016-01-04&rankRange=1-10" %>% 
+  read_html() %>% 
+  html_table(fill = TRUE) %>%
+  .[[1]]
+ranking_2015 <- ranking_2015[, -c(2:3)]
+ranking_2015
+
+ranking_2016 <- "https://www.atptour.com/en/rankings/singles?rankDate=2017-01-02&rankRange=1-10" %>% 
+  read_html() %>% 
+  html_table(fill = TRUE) %>%
+  .[[1]]
+ranking_2016 <- ranking_2016[, -c(2:3)]
+ranking_2016
+
+```
+
+## Unusual Patterns on Winner Games & World Ranking Anlysis
+
+```{r}
+
+Grand_Slam_Finals_2015_2016 <- Grand_Slam_Matches %>% 
+  select(tourney_id, tourney_name, tourney_date, round, surface, winner_name, loser_name, score, minutes) %>%
+  filter(substr(tourney_id, 1, 4) >= "2015" & round == "F") %>%
+  arrange(desc(tourney_date, tourney_name))
+Grand_Slam_Finals_2015_2016
+ggplot(Grand_Slam_Finals_2015_2016, aes(winner_name, fill = as.factor(tourney_name))) +
+  geom_bar(stat = "count", alpha = 1 ) + 
+  labs(y = "Number of Finals", x = "Final Winner", title = "Grand Slams' Winners 2015 - 2016") +
+  theme(legend.position = "right", axis.text.x = element_text(angle = 90, hjust = 0), plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_legend(title = "Tourney"))
+ggplot(Grand_Slam_Finals_2015_2016, aes(winner_name, fill = as.factor(winner_name))) +
+  geom_bar(alpha = 0.8, show.legend = FALSE) + 
+  labs(y = "Finals", x = "Winners", title = "Grand Slams' Winners 2015 - 2016") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0), plot.title = element_text(hjust = 0.5)) +
+  coord_flip() +
+  facet_wrap(~tourney_name)
+
+Masters_Finals_2015_2016 <- Masters_Matches %>% 
+  select(tourney_id, tourney_name, tourney_date, round, surface, winner_name, loser_name, score, minutes) %>%
+  filter(substr(tourney_id, 1, 4) >= "2015" & round == "F") %>%
+  arrange(desc(tourney_date, tourney_name))
+Masters_Finals_2015_2016
+ggplot(Masters_Finals_2015_2016, aes(winner_name, fill = as.factor(tourney_name))) +
+  geom_bar(stat = "count", alpha = 1 ) + 
+  labs(y = "Number of Finals", x = "Final Winner", title = "ATP Masters Series' Winners 2015 - 2016") +
+  theme(legend.position = "right", axis.text.x = element_text(angle = 90, hjust = 0), plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_legend(title = "Tourney"))
+ggplot(Masters_Finals_2015_2016, aes(winner_name, fill = as.factor(winner_name))) +
+  geom_bar(alpha = 0.8, show.legend = FALSE) + 
+  labs(y = "Finals", x = "Winners", title = "ATP Masters Series' Winners 2015 - 2016") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0), plot.title = element_text(hjust = 0.5)) +
+  coord_flip() +
+  facet_wrap(~tourney_name)
+
+```
+
+```
